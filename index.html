@@ -1,210 +1,1248 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sample Online Records</title>
-<style>
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    font-family: Arial, sans-serif;
-    background-color: #f1f5f9;
-    color: #1f2937;
-    min-height: 100vh;
-  }
-  header {
-    background: rgba(23, 59, 103, 0.92);
-    backdrop-filter: blur(8px);
-    color: white;
-    padding: 22px 5%;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
-  }
-  header h1 { margin: 0 0 6px; font-size: 24px; }
-  header p { margin: 0; color: #dbeafe; }
-  main { max-width: 1050px; margin: 28px auto; padding: 0 16px; }
-  .stats { display: grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap: 14px; margin-bottom: 18px; }
-  .stat, .panel {
-    background: rgba(255, 255, 255, 0.94);
-    backdrop-filter: blur(10px);
-    border-radius: 12px;
-    padding: 20px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-  }
-  .stat span { color: #64748b; font-size: 14px; }
-  .stat strong { display: block; font-size: 30px; margin-top: 8px; color: #173b67; }
-  .panel { margin-bottom: 18px; }
-  h2 { font-size: 19px; margin: 0 0 16px; }
-  form { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
-  label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 6px; color: #475569; }
-  input, textarea { width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 11px; font: inherit; }
-  textarea { resize: vertical; min-height: 42px; }
-  .full { grid-column: 1 / -1; }
-  button { border: 0; border-radius: 8px; padding: 11px 16px; cursor: pointer; font-weight: 700; }
-  .primary { background: #1769aa; color: white; }
-  .secondary { background: #e2e8f0; color: #334155; }
-  .danger { background: #fee2e2; color: #991b1b; }
-  .toolbar { display: flex; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-  .toolbar input { max-width: 300px; }
-  .table-wrap { overflow-x: auto; }
-  table { border-collapse: collapse; width: 100%; min-width: 620px; }
-  th, td { padding: 12px 10px; border-bottom: 1px solid #e2e8f0; text-align: left; font-size: 14px; }
-  th { color: #64748b; background: #f8fafc; }
-  .actions { display: flex; gap: 6px; }
-  .actions button { padding: 7px 10px; font-size: 12px; }
-  .empty { text-align: center; color: #64748b; padding: 28px; }
-  .note { color: #64748b; font-size: 12px; margin-top: 12px; }
-  @media(max-width:600px) { form { grid-template-columns: 1fr; } .full { grid-column: auto; } .toolbar { align-items: stretch; flex-direction: column; } .toolbar input { max-width: none; } }
-</style>
-</head>
-<body>
-<header>
-  <h1>Sample Online Records System</h1>
-  <p>Simple data entry and records dashboard</p>
-</header>
-<main>
-  <section class="stats">
-    <div class="stat"><span>Total Records</span><strong id="totalCount">0</strong></div>
-    <div class="stat"><span>Last Updated</span><strong id="lastUpdated" style="font-size:17px">—</strong></div>
-  </section>
-
-  <section class="panel">
-    <h2 id="formTitle">Add New Record</h2>
-    <form id="recordForm">
-      <div>
-        <label for="person">Name *</label>
-        <input id="person" required maxlength="80" placeholder="Enter full name">
-      </div>
-      <div>
-        <label for="department">Department</label>
-        <input id="department" maxlength="80" placeholder="e.g. Quality Assurance">
-      </div>
-      <div class="full">
-        <label for="remarks">Remarks</label>
-        <textarea id="remarks" maxlength="300" placeholder="Enter notes (optional)"></textarea>
-      </div>
-      <div class="full" style="display:flex;gap:8px">
-        <button class="primary" type="submit" id="saveButton">Save Record</button>
-        <button class="secondary" type="button" id="cancelButton" hidden>Cancel Edit</button>
-      </div>
-    </form>
-    <p class="note">Demo version: records are saved only in this browser. Online sharing will be added through a database.</p>
-  </section>
-
-  <section class="panel">
-    <div class="toolbar">
-      <h2 style="margin:0">Records List</h2>
-      <input id="search" type="search" placeholder="Search records...">
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>#</th><th>Name</th><th>Department</th><th>Remarks</th><th>Date Added</th><th>Actions</th></tr></thead>
-        <tbody id="recordsBody"></tbody>
-      </table>
-      <div id="emptyState" class="empty">No records yet. Add your first record above.</div>
-    </div>
-  </section>
-</main>
-<script>
-(() => {
-  const STORAGE_KEY = "sample_online_records_v1";
-  let records = [];
-  let editingId = null;
-  const $ = id => document.getElementById(id);
-  const form = $("recordForm");
-
-  try { records = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }
-  catch { records = []; }
-
-  function save() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-    render();
-  }
-  function safe(value) {
-    return String(value ?? "").replace(/[&<>"']/g, ch => ({
-      "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
-    }[ch]));
-  }
-  function render() {
-    const query = $("search").value.trim().toLowerCase();
-    const filtered = records.filter(r =>
-      [r.name, r.department, r.remarks].some(v => String(v).toLowerCase().includes(query))
-    );
-    $("totalCount").textContent = records.length;
-    $("lastUpdated").textContent = records.length
-      ? new Date(Math.max(...records.map(r => r.updatedAt || r.createdAt))).toLocaleString()
-      : "—";
-    $("recordsBody").innerHTML = filtered.map((r, i) => `
-      <tr>
-        <td>${i + 1}</td><td>${safe(r.name)}</td><td>${safe(r.department || "—")}</td>
-        <td>${safe(r.remarks || "—")}</td><td>${new Date(r.createdAt).toLocaleDateString()}</td>
-        <td><div class="actions">
-          <button class="secondary" data-edit="${safe(r.id)}" type="button">Edit</button>
-          <button class="danger" data-delete="${safe(r.id)}" type="button">Delete</button>
-        </div></td>
-      </tr>`).join("");
-    $("emptyState").hidden = filtered.length > 0;
-  }
-
-  form.addEventListener("submit", event => {
-    event.preventDefault();
-    const name = $("person").value.trim();
-    if (!name) return;
-    const now = Date.now();
-    if (editingId) {
-      const item = records.find(r => r.id === editingId);
-      if (item) Object.assign(item, {
-        name, department: $("department").value.trim(),
-        remarks: $("remarks").value.trim(), updatedAt: now
-      });
-    } else {
-      records.unshift({
-        id: (crypto.randomUUID ? crypto.randomUUID() : String(now) + Math.random()),
-        name, department: $("department").value.trim(),
-        remarks: $("remarks").value.trim(), createdAt: now, updatedAt: now
-      });
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Our Love Story & Memories | Couple Photo Album</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,700;1,400;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #e11d48;
+      --primary-light: #ffe4e6;
+      --primary-hover: #be123c;
+      --accent: #fb7185;
+      --bg-cream: #fffaf9;
+      --card-bg: #ffffff;
+      --text-dark: #1e293b;
+      --text-muted: #64748b;
+      --border-color: #fecdd3;
+      --shadow-sm: 0 4px 12px rgba(225, 29, 72, 0.08);
+      --shadow-lg: 0 16px 36px rgba(225, 29, 72, 0.14);
     }
-    resetForm();
-    save();
-  });
 
-  $("recordsBody").addEventListener("click", event => {
-    const editId = event.target.dataset.edit;
-    const deleteId = event.target.dataset.delete;
-    if (editId) {
-      const item = records.find(r => r.id === editId);
-      if (!item) return;
-      editingId = editId;
-      $("person").value = item.name;
-      $("department").value = item.department || "";
-      $("remarks").value = item.remarks || "";
-      $("formTitle").textContent = "Edit Record";
-      $("saveButton").textContent = "Update Record";
-      $("cancelButton").hidden = false;
-      $("person").focus();
-      window.scrollTo({top: 0, behavior: "smooth"});
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
     }
-    if (deleteId) {
-      const item = records.find(r => r.id === deleteId);
-      if (item && confirm(`Delete the record for ${item.name}?`)) {
-        records = records.filter(r => r.id !== deleteId);
-        if (editingId === deleteId) resetForm();
-        save();
+
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: linear-gradient(180deg, #fff5f5 0%, #fffaf9 50%, #fdf2f4 100%);
+      color: var(--text-dark);
+      min-height: 100vh;
+      line-height: 1.6;
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    /* Floating hearts background container */
+    .hearts-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+    }
+
+    .heart-particle {
+      position: absolute;
+      bottom: -20px;
+      font-size: 16px;
+      opacity: 0.6;
+      animation: floatUp 12s linear infinite;
+    }
+
+    @keyframes floatUp {
+      0% {
+        transform: translateY(0) rotate(0deg) scale(0.8);
+        opacity: 0.7;
+      }
+      100% {
+        transform: translateY(-110vh) rotate(360deg) scale(1.2);
+        opacity: 0;
       }
     }
-  });
 
-  function resetForm() {
-    form.reset();
-    editingId = null;
-    $("formTitle").textContent = "Add New Record";
-    $("saveButton").textContent = "Save Record";
-    $("cancelButton").hidden = true;
-  }
-  $("cancelButton").addEventListener("click", resetForm);
-  $("search").addEventListener("input", render);
-  render();
-})();
-</script>
+    /* Header / Hero Section */
+    header {
+      position: relative;
+      z-index: 1;
+      text-align: center;
+      padding: 55px 20px 30px;
+      background: linear-gradient(135deg, rgba(255, 241, 242, 0.9), rgba(255, 255, 255, 0.95));
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+      box-shadow: 0 4px 20px rgba(244, 63, 94, 0.08);
+    }
+
+    .badge-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #ffe4e6;
+      color: var(--primary);
+      font-size: 13px;
+      font-weight: 700;
+      padding: 6px 16px;
+      border-radius: 50px;
+      margin-bottom: 12px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    .couple-title {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(32px, 5vw, 50px);
+      font-weight: 700;
+      color: #881337;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .couple-names-wrap {
+      cursor: pointer;
+      border-bottom: 2px dashed rgba(225, 29, 72, 0.4);
+      padding: 0 4px;
+      transition: all 0.2s ease;
+    }
+
+    .couple-names-wrap:hover {
+      color: var(--primary);
+      border-color: var(--primary);
+    }
+
+    .subtitle {
+      font-size: 16px;
+      color: var(--text-muted);
+      max-width: 580px;
+      margin: 0 auto 24px;
+      font-style: italic;
+    }
+
+    /* Counter Bar */
+    .anniversary-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      background: white;
+      padding: 10px 24px;
+      border-radius: 50px;
+      box-shadow: var(--shadow-sm);
+      border: 1px solid #fecdd3;
+      margin-bottom: 22px;
+    }
+
+    .anniversary-badge strong {
+      color: var(--primary);
+      font-size: 18px;
+    }
+
+    .edit-date-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 13px;
+      cursor: pointer;
+      text-decoration: underline;
+      padding: 0;
+    }
+
+    .edit-date-btn:hover {
+      color: var(--primary);
+    }
+
+    /* Action bar */
+    .hero-actions {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 24px;
+      border-radius: 50px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.25s ease;
+      font-family: inherit;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary), #f43f5e);
+      color: white;
+      box-shadow: 0 6px 18px rgba(225, 29, 72, 0.3);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(225, 29, 72, 0.4);
+    }
+
+    .btn-secondary {
+      background: white;
+      color: var(--text-dark);
+      border: 1px solid #cbd5e1;
+    }
+
+    .btn-secondary:hover {
+      background: #f8fafc;
+      border-color: #94a3b8;
+    }
+
+    /* Main Container */
+    main {
+      position: relative;
+      z-index: 1;
+      max-width: 1200px;
+      margin: 32px auto 60px;
+      padding: 0 20px;
+    }
+
+    /* Filter & Search Bar */
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 28px;
+      flex-wrap: wrap;
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(8px);
+      padding: 14px 20px;
+      border-radius: 16px;
+      border: 1px solid #fecdd3;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .category-pills {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      background: white;
+      border: 1px solid #fed7aa;
+      border-color: #fecdd3;
+      color: var(--text-muted);
+      padding: 8px 16px;
+      border-radius: 50px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .pill:hover, .pill.active {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+      box-shadow: 0 4px 12px rgba(225, 29, 72, 0.25);
+    }
+
+    .search-input {
+      padding: 9px 16px;
+      border: 1px solid #e2e8f0;
+      border-radius: 50px;
+      font-size: 13px;
+      outline: none;
+      min-width: 220px;
+      transition: border 0.2s;
+      font-family: inherit;
+    }
+
+    .search-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.15);
+    }
+
+    /* Photo Grid / Album Wall */
+    .album-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 28px;
+    }
+
+    /* Polaroid Card */
+    .photo-card {
+      background: var(--card-bg);
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+      border: 1px solid rgba(254, 205, 211, 0.7);
+      transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .photo-card:hover {
+      transform: translateY(-6px);
+      box-shadow: var(--shadow-lg);
+      border-color: var(--accent);
+    }
+
+    .card-img-wrap {
+      position: relative;
+      width: 100%;
+      height: 270px;
+      overflow: hidden;
+      cursor: pointer;
+      background: #f1f5f9;
+    }
+
+    .card-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .photo-card:hover .card-img {
+      transform: scale(1.06);
+    }
+
+    .category-badge {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(8px);
+      color: var(--primary);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 5px 12px;
+      border-radius: 50px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    }
+
+    .card-content {
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
+
+    .card-date {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .card-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 20px;
+      font-weight: 700;
+      color: #4c0519;
+      margin-bottom: 8px;
+    }
+
+    .card-caption {
+      font-size: 14px;
+      color: #475569;
+      margin-bottom: 18px;
+      flex: 1;
+      white-space: pre-wrap;
+    }
+
+    .card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-top: 1px solid #fecdd3;
+      padding-top: 14px;
+      margin-top: auto;
+    }
+
+    .like-btn {
+      background: #fff1f2;
+      border: 1px solid #fecdd3;
+      color: var(--primary);
+      font-size: 13px;
+      font-weight: 700;
+      padding: 6px 14px;
+      border-radius: 50px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+
+    .like-btn:hover {
+      background: var(--primary);
+      color: white;
+      transform: scale(1.05);
+    }
+
+    .card-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .icon-btn {
+      background: none;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 16px;
+      padding: 6px;
+      border-radius: 8px;
+      transition: color 0.2s, background 0.2s;
+    }
+
+    .icon-btn:hover {
+      color: var(--primary);
+      background: #ffe4e6;
+    }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 70px 20px;
+      grid-column: 1 / -1;
+      background: white;
+      border-radius: 20px;
+      border: 2px dashed #fecdd3;
+    }
+
+    .empty-state h3 {
+      font-family: 'Playfair Display', serif;
+      font-size: 24px;
+      color: #881337;
+      margin-bottom: 8px;
+    }
+
+    .empty-state p {
+      color: var(--text-muted);
+      margin-bottom: 20px;
+    }
+
+    /* Modal Styling */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(15, 23, 42, 0.65);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 20px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal-card {
+      background: white;
+      border-radius: 22px;
+      width: 100%;
+      max-width: 540px;
+      max-height: 90vh;
+      overflow-y: auto;
+      padding: 28px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+      position: relative;
+      transform: translateY(20px) scale(0.96);
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .modal-overlay.active .modal-card {
+      transform: translateY(0) scale(1);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      border-bottom: 1px solid #fecdd3;
+      padding-bottom: 12px;
+    }
+
+    .modal-header h3 {
+      font-family: 'Playfair Display', serif;
+      font-size: 22px;
+      color: #881337;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 22px;
+      cursor: pointer;
+      color: var(--text-muted);
+      line-height: 1;
+    }
+
+    .modal-close:hover {
+      color: var(--primary);
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 700;
+      color: #334155;
+      margin-bottom: 6px;
+    }
+
+    .form-control {
+      width: 100%;
+      padding: 11px 14px;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      transition: border 0.2s;
+    }
+
+    .form-control:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.15);
+    }
+
+    textarea.form-control {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .img-preview-box {
+      width: 100%;
+      height: 180px;
+      border: 2px dashed #fecdd3;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 10px;
+      overflow: hidden;
+      background: #fff5f5;
+      position: relative;
+    }
+
+    .img-preview-box img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .img-preview-placeholder {
+      font-size: 13px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    /* Lightbox Modal */
+    .lightbox-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.92);
+      backdrop-filter: blur(14px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+      padding: 20px;
+    }
+
+    .lightbox-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .lightbox-container {
+      max-width: 900px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+    }
+
+    .lightbox-img {
+      max-height: 70vh;
+      max-width: 100%;
+      border-radius: 14px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+      object-fit: contain;
+    }
+
+    .lightbox-caption-box {
+      margin-top: 18px;
+      text-align: center;
+      color: white;
+      max-width: 700px;
+    }
+
+    .lightbox-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 24px;
+      margin-bottom: 6px;
+      color: #ffe4e6;
+    }
+
+    .lightbox-desc {
+      font-size: 14px;
+      color: #cbd5e1;
+    }
+
+    .lightbox-nav {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(255, 255, 255, 0.2);
+      border: none;
+      color: white;
+      font-size: 28px;
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+
+    .lightbox-nav:hover {
+      background: rgba(255, 255, 255, 0.4);
+    }
+
+    .lightbox-prev { left: -60px; }
+    .lightbox-next { right: -60px; }
+
+    .lightbox-close-btn {
+      position: absolute;
+      top: -45px;
+      right: 0;
+      background: none;
+      border: none;
+      color: white;
+      font-size: 30px;
+      cursor: pointer;
+    }
+
+    @media (max-width: 768px) {
+      .lightbox-prev { left: 10px; }
+      .lightbox-next { right: 10px; }
+      .filter-bar { flex-direction: column; align-items: stretch; }
+      .search-input { width: 100%; }
+      .album-grid { grid-template-columns: 1fr; }
+    }
+
+    footer {
+      text-align: center;
+      padding: 30px 20px;
+      color: var(--text-muted);
+      font-size: 13px;
+      border-top: 1px solid var(--border-color);
+      background: white;
+      position: relative;
+      z-index: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Floating animated hearts -->
+  <div class="hearts-container" id="heartsContainer"></div>
+
+  <!-- Header / Hero -->
+  <header>
+    <div class="badge-tag">💌 Our Memory Keeper</div>
+    <h1 class="couple-title">
+      <span class="couple-names-wrap" id="coupleNamesDisplay" title="Click to edit names">Joshua &amp; My Love</span>
+      <span>💕</span>
+    </h1>
+    <p class="subtitle">"Every moment with you is a memory I cherish and want to hold onto forever."</p>
+
+    <!-- Anniversary Days Counter -->
+    <div class="anniversary-badge">
+      <span>Days in Love:</span>
+      <strong id="daysCounter">0</strong>
+      <button class="edit-date-btn" id="editDateBtn" title="Set Anniversary Date">Change Date 📅</button>
+    </div>
+
+    <!-- Actions -->
+    <div class="hero-actions">
+      <button class="btn btn-primary" id="openAddModalBtn">
+        <span>✨ Add New Memory</span>
+      </button>
+      <button class="btn btn-secondary" id="resetDemoBtn" title="Reset sample photos">
+        <span>↺ Reset Memories</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main>
+    <!-- Filter and Search -->
+    <div class="filter-bar">
+      <div class="category-pills" id="categoryPills">
+        <button class="pill active" data-category="All">All Memories</button>
+        <button class="pill" data-category="Dates">Dates &amp; Food</button>
+        <button class="pill" data-category="Adventures">Adventures</button>
+        <button class="pill" data-category="Milestones">Milestones</button>
+        <button class="pill" data-category="Sweet Moments">Sweet Moments</button>
+      </div>
+      <input type="search" id="searchInput" class="search-input" placeholder="🔍 Search memory or caption...">
+    </div>
+
+    <!-- Album Grid -->
+    <div class="album-grid" id="albumGrid">
+      <!-- Photos injected via JavaScript -->
+    </div>
+  </main>
+
+  <!-- Add / Edit Memory Modal -->
+  <div class="modal-overlay" id="memoryModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modalTitle">Add New Memory</h3>
+        <button class="modal-close" id="closeModalBtn">&times;</button>
+      </div>
+      <form id="memoryForm">
+        <input type="hidden" id="editMemoryId">
+        <div class="form-group">
+          <label for="memTitle">Memory Title *</label>
+          <input type="text" id="memTitle" class="form-control" placeholder="e.g. Sunset Dinner by the Beach" required>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="form-group">
+            <label for="memDate">Date *</label>
+            <input type="date" id="memDate" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label for="memCategory">Category *</label>
+            <select id="memCategory" class="form-control" required>
+              <option value="Dates">Dates &amp; Food</option>
+              <option value="Adventures">Adventures</option>
+              <option value="Milestones">Milestones</option>
+              <option value="Sweet Moments">Sweet Moments</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Photo Upload or Image Link</label>
+          <input type="file" id="memFileInput" class="form-control" accept="image/*" style="margin-bottom: 8px;">
+          <input type="url" id="memUrlInput" class="form-control" placeholder="Or paste image URL (https://...)">
+          <div class="img-preview-box" id="imgPreviewBox">
+            <div class="img-preview-placeholder">Image preview will appear here</div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="memCaption">Our Story / Note</label>
+          <textarea id="memCaption" class="form-control" placeholder="Write a sweet note about this day..."></textarea>
+        </div>
+
+        <div style="display:flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+          <button type="button" class="btn btn-secondary" id="cancelModalBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="saveMemoryBtn">Save Memory 💕</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Lightbox Modal -->
+  <div class="lightbox-overlay" id="lightboxModal">
+    <div class="lightbox-container">
+      <button class="lightbox-close-btn" id="lightboxCloseBtn">&times;</button>
+      <button class="lightbox-nav lightbox-prev" id="lightboxPrevBtn">&#10094;</button>
+      <img src="" alt="Full view" class="lightbox-img" id="lightboxImg">
+      <button class="lightbox-nav lightbox-next" id="lightboxNextBtn">&#10095;</button>
+      <div class="lightbox-caption-box">
+        <h4 class="lightbox-title" id="lightboxTitle"></h4>
+        <p class="lightbox-desc" id="lightboxDesc"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    <p>Made with love for our unforgettable moments together 💖</p>
+  </footer>
+
+  <script>
+    // Initial sample photos
+    const defaultMemories = [
+      {
+        id: '1',
+        title: 'Our First Sunset Date',
+        date: '2024-02-14',
+        category: 'Dates',
+        image: 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?auto=format&fit=crop&w=1000&q=80',
+        caption: 'Watching the sunset turn into warm shades of gold and pink. Best date ever! 💕',
+        likes: 12
+      },
+      {
+        id: '2',
+        title: 'Coffee & Endless Conversations',
+        date: '2024-05-20',
+        category: 'Dates',
+        image: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=1000&q=80',
+        caption: 'Quiet mornings, hot lattes, and talking about our dreams for hours.',
+        likes: 8
+      },
+      {
+        id: '3',
+        title: 'Weekend Mountain Trip',
+        date: '2024-08-12',
+        category: 'Adventures',
+        image: 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&w=1000&q=80',
+        caption: 'Road tripping with the best travel companion in the world. Next adventure soon!',
+        likes: 19
+      },
+      {
+        id: '4',
+        title: 'Stargazing by the Campfire',
+        date: '2024-10-04',
+        category: 'Adventures',
+        image: 'https://images.unsplash.com/photo-1510312305653-8ed496efae75?auto=format&fit=crop&w=1000&q=80',
+        caption: 'Cold nights, warm hugs, and counting shooting stars together ✨',
+        likes: 24
+      },
+      {
+        id: '5',
+        title: 'Our Anniversary Celebration',
+        date: '2025-02-14',
+        category: 'Milestones',
+        image: 'https://images.unsplash.com/photo-1522673607200-164d1b6ce486?auto=format&fit=crop&w=1000&q=80',
+        caption: 'Laughter, love, and growing together each day. Cheers to forever! 🥂',
+        likes: 35
+      },
+      {
+        id: '6',
+        title: 'Spontaneous Rainy Day Walk',
+        date: '2025-06-18',
+        category: 'Sweet Moments',
+        image: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=1000&q=80',
+        caption: 'Sharing one umbrella and laughing when our shoes got completely soaked.',
+        likes: 15
+      }
+    ];
+
+    // Local Storage helpers
+    function getMemories() {
+      const data = localStorage.getItem('couple_memories');
+      if (!data) {
+        localStorage.setItem('couple_memories', JSON.stringify(defaultMemories));
+        return defaultMemories;
+      }
+      try {
+        return JSON.parse(data);
+      } catch (e) {
+        return defaultMemories;
+      }
+    }
+
+    function saveMemories(memories) {
+      localStorage.setItem('couple_memories', JSON.stringify(memories));
+    }
+
+    // Couple Names & Anniversary
+    function initCoupleInfo() {
+      const savedNames = localStorage.getItem('couple_names') || 'Joshua & My Love';
+      document.getElementById('coupleNamesDisplay').textContent = savedNames;
+
+      document.getElementById('coupleNamesDisplay').addEventListener('click', () => {
+        const newNames = prompt('Enter couple names:', savedNames);
+        if (newNames && newNames.trim()) {
+          localStorage.setItem('couple_names', newNames.trim());
+          document.getElementById('coupleNamesDisplay').textContent = newNames.trim();
+        }
+      });
+
+      const savedDate = localStorage.getItem('couple_anniversary') || '2024-02-14';
+      updateDaysCounter(savedDate);
+
+      document.getElementById('editDateBtn').addEventListener('click', () => {
+        const newDate = prompt('Enter your anniversary / start date (YYYY-MM-DD):', savedDate);
+        if (newDate && !isNaN(new Date(newDate).getTime())) {
+          localStorage.setItem('couple_anniversary', newDate);
+          updateDaysCounter(newDate);
+        }
+      });
+    }
+
+    function updateDaysCounter(startDateStr) {
+      const start = new Date(startDateStr);
+      const today = new Date();
+      const diffTime = today - start;
+      const diffDays = Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
+      document.getElementById('daysCounter').textContent = `${diffDays} Days`;
+    }
+
+    // Floating Hearts Animation Generator
+    function createHearts() {
+      const container = document.getElementById('heartsContainer');
+      const heartIcons = ['💖', '💕', '💗', '💓', '✨', '🌸'];
+      for (let i = 0; i < 15; i++) {
+        const heart = document.createElement('div');
+        heart.className = 'heart-particle';
+        heart.textContent = heartIcons[Math.floor(Math.random() * heartIcons.length)];
+        heart.style.left = `${Math.random() * 100}%`;
+        heart.style.animationDuration = `${8 + Math.random() * 7}s`;
+        heart.style.animationDelay = `${Math.random() * 8}s`;
+        container.appendChild(heart);
+      }
+    }
+
+    // App State
+    let currentCategory = 'All';
+    let searchQuery = '';
+    let currentLightboxList = [];
+    let currentLightboxIndex = 0;
+
+    // Render Memories
+    function renderGallery() {
+      const grid = document.getElementById('albumGrid');
+      const all = getMemories();
+
+      const filtered = all.filter(m => {
+        const matchCat = currentCategory === 'All' || m.category === currentCategory;
+        const query = searchQuery.toLowerCase().trim();
+        const matchSearch = !query || 
+          m.title.toLowerCase().includes(query) || 
+          m.caption.toLowerCase().includes(query) ||
+          m.category.toLowerCase().includes(query);
+        return matchCat && matchSearch;
+      });
+
+      if (filtered.length === 0) {
+        grid.innerHTML = `
+          <div class="empty-state">
+            <h3>No memories found 💕</h3>
+            <p>Try searching another keyword or add a new memory to your album!</p>
+            <button class="btn btn-primary" onclick="openAddModal()">Add First Memory</button>
+          </div>
+        `;
+        return;
+      }
+
+      grid.innerHTML = filtered.map((m, index) => `
+        <article class="photo-card" data-id="${m.id}">
+          <div class="card-img-wrap" onclick="openLightbox('${m.id}')">
+            <span class="category-badge">${escapeHtml(m.category)}</span>
+            <img class="card-img" src="${m.image || 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?auto=format&fit=crop&w=800&q=80'}" alt="${escapeHtml(m.title)}" loading="lazy">
+          </div>
+          <div class="card-content">
+            <div class="card-date">
+              <span>📅</span>
+              <span>${formatDate(m.date)}</span>
+            </div>
+            <h3 class="card-title">${escapeHtml(m.title)}</h3>
+            <p class="card-caption">${escapeHtml(m.caption)}</p>
+            <div class="card-footer">
+              <button class="like-btn" onclick="toggleLike('${m.id}')">
+                <span>❤️</span>
+                <span>${m.likes || 0}</span>
+              </button>
+              <div class="card-actions">
+                <button class="icon-btn" title="Edit" onclick="openEditModal('${m.id}')">✏️</button>
+                <button class="icon-btn" title="Delete" onclick="deleteMemory('${m.id}')">🗑️</button>
+              </div>
+            </div>
+          </div>
+        </article>
+      `).join('');
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '';
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    // Likes
+    window.toggleLike = function(id) {
+      const list = getMemories();
+      const item = list.find(m => m.id === id);
+      if (item) {
+        item.likes = (item.likes || 0) + 1;
+        saveMemories(list);
+        renderGallery();
+      }
+    };
+
+    // Delete Memory
+    window.deleteMemory = function(id) {
+      if (confirm('Are you sure you want to delete this memory?')) {
+        let list = getMemories();
+        list = list.filter(m => m.id !== id);
+        saveMemories(list);
+        renderGallery();
+      }
+    };
+
+    // Modal Operations
+    const memoryModal = document.getElementById('memoryModal');
+    const memoryForm = document.getElementById('memoryForm');
+    const memFileInput = document.getElementById('memFileInput');
+    const memUrlInput = document.getElementById('memUrlInput');
+    const imgPreviewBox = document.getElementById('imgPreviewBox');
+    let currentBase64Image = '';
+
+    window.openAddModal = function() {
+      document.getElementById('modalTitle').textContent = 'Add New Memory';
+      document.getElementById('editMemoryId').value = '';
+      memoryForm.reset();
+      currentBase64Image = '';
+      imgPreviewBox.innerHTML = '<div class="img-preview-placeholder">Image preview will appear here</div>';
+      document.getElementById('memDate').value = new Date().toISOString().split('T')[0];
+      memoryModal.classList.add('active');
+    };
+
+    window.openEditModal = function(id) {
+      const list = getMemories();
+      const item = list.find(m => m.id === id);
+      if (!item) return;
+
+      document.getElementById('modalTitle').textContent = 'Edit Memory';
+      document.getElementById('editMemoryId').value = item.id;
+      document.getElementById('memTitle').value = item.title;
+      document.getElementById('memDate').value = item.date;
+      document.getElementById('memCategory').value = item.category;
+      document.getElementById('memCaption').value = item.caption;
+      document.getElementById('memUrlInput').value = item.image.startsWith('data:') ? '' : item.image;
+      currentBase64Image = item.image;
+
+      imgPreviewBox.innerHTML = `<img src="${item.image}" alt="Preview">`;
+      memoryModal.classList.add('active');
+    };
+
+    function closeModal() {
+      memoryModal.classList.remove('active');
+    }
+
+    document.getElementById('openAddModalBtn').addEventListener('click', openAddModal);
+    document.getElementById('closeModalBtn').addEventListener('click', closeModal);
+    document.getElementById('cancelModalBtn').addEventListener('click', closeModal);
+
+    // Image Upload Handlers
+    memFileInput.addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(event) {
+          // Resize image on canvas to keep localStorage safe
+          const img = new Image();
+          img.onload = function() {
+            const canvas = document.createElement('canvas');
+            const maxW = 1000;
+            let width = img.width;
+            let height = img.height;
+            if (width > maxW) {
+              height = Math.round((height * maxW) / width);
+              width = maxW;
+            }
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            currentBase64Image = canvas.toDataURL('image/jpeg', 0.82);
+            imgPreviewBox.innerHTML = `<img src="${currentBase64Image}" alt="Preview">`;
+            memUrlInput.value = '';
+          };
+          img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    memUrlInput.addEventListener('input', function(e) {
+      const url = e.target.value.trim();
+      if (url) {
+        currentBase64Image = url;
+        imgPreviewBox.innerHTML = `<img src="${url}" alt="Preview" onerror="this.parentElement.innerHTML='<div class=\\'img-preview-placeholder\\'>Invalid image link</div>'">`;
+      }
+    });
+
+    // Save Memory Form
+    memoryForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      const id = document.getElementById('editMemoryId').value;
+      const title = document.getElementById('memTitle').value.trim();
+      const date = document.getElementById('memDate').value;
+      const category = document.getElementById('memCategory').value;
+      const caption = document.getElementById('memCaption').value.trim();
+      const image = currentBase64Image || 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?auto=format&fit=crop&w=800&q=80';
+
+      const list = getMemories();
+
+      if (id) {
+        // Edit existing
+        const item = list.find(m => m.id === id);
+        if (item) {
+          item.title = title;
+          item.date = date;
+          item.category = category;
+          item.caption = caption;
+          item.image = image;
+        }
+      } else {
+        // Add new
+        list.unshift({
+          id: String(Date.now()),
+          title,
+          date,
+          category,
+          caption,
+          image,
+          likes: 0
+        });
+      }
+
+      saveMemories(list);
+      closeModal();
+      renderGallery();
+    });
+
+    // Lightbox
+    const lightboxModal = document.getElementById('lightboxModal');
+    const lightboxImg = document.getElementById('lightboxImg');
+    const lightboxTitle = document.getElementById('lightboxTitle');
+    const lightboxDesc = document.getElementById('lightboxDesc');
+
+    window.openLightbox = function(id) {
+      const all = getMemories();
+      const filtered = all.filter(m => {
+        const matchCat = currentCategory === 'All' || m.category === currentCategory;
+        const query = searchQuery.toLowerCase().trim();
+        return matchCat && (!query || m.title.toLowerCase().includes(query) || m.caption.toLowerCase().includes(query));
+      });
+
+      currentLightboxList = filtered;
+      currentLightboxIndex = currentLightboxList.findIndex(m => m.id === id);
+      if (currentLightboxIndex === -1) return;
+
+      updateLightbox();
+      lightboxModal.classList.add('active');
+    };
+
+    function updateLightbox() {
+      const item = currentLightboxList[currentLightboxIndex];
+      if (!item) return;
+      lightboxImg.src = item.image;
+      lightboxTitle.textContent = item.title;
+      lightboxDesc.textContent = `${formatDate(item.date)} • ${item.caption || ''}`;
+    }
+
+    document.getElementById('lightboxCloseBtn').addEventListener('click', () => {
+      lightboxModal.classList.remove('active');
+    });
+
+    document.getElementById('lightboxPrevBtn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (currentLightboxList.length > 0) {
+        currentLightboxIndex = (currentLightboxIndex - 1 + currentLightboxList.length) % currentLightboxList.length;
+        updateLightbox();
+      }
+    });
+
+    document.getElementById('lightboxNextBtn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (currentLightboxList.length > 0) {
+        currentLightboxIndex = (currentLightboxIndex + 1) % currentLightboxList.length;
+        updateLightbox();
+      }
+    });
+
+    // Keyboard navigation
+    window.addEventListener('keydown', (e) => {
+      if (lightboxModal.classList.contains('active')) {
+        if (e.key === 'Escape') lightboxModal.classList.remove('active');
+        if (e.key === 'ArrowLeft') document.getElementById('lightboxPrevBtn').click();
+        if (e.key === 'ArrowRight') document.getElementById('lightboxNextBtn').click();
+      }
+      if (e.key === 'Escape' && memoryModal.classList.contains('active')) {
+        closeModal();
+      }
+    });
+
+    // Category Filter Pills
+    document.querySelectorAll('.pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        currentCategory = pill.dataset.category;
+        renderGallery();
+      });
+    });
+
+    // Search Input
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+      searchQuery = e.target.value;
+      renderGallery();
+    });
+
+    // Reset Demo Button
+    document.getElementById('resetDemoBtn').addEventListener('click', () => {
+      if (confirm('Reset to default romantic photos and memories?')) {
+        localStorage.setItem('couple_memories', JSON.stringify(defaultMemories));
+        renderGallery();
+      }
+    });
+
+    // Initialization
+    createHearts();
+    initCoupleInfo();
+    renderGallery();
+  </script>
 </body>
 </html>
