@@ -301,7 +301,7 @@
     .card-img-wrap {
       position: relative;
       width: 100%;
-      height: 270px;
+      aspect-ratio: 3 / 4;
       overflow: hidden;
       cursor: pointer;
       background: #f1f5f9;
@@ -402,9 +402,82 @@
     .card-caption {
       font-size: 14px;
       color: #475569;
-      margin-bottom: 18px;
+      margin-bottom: 14px;
       flex: 1;
       white-space: pre-wrap;
+    }
+
+    /* Song Tag / Player */
+    .card-song {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: linear-gradient(135deg, #fff0f3, #ffe4e6);
+      border: 1px solid #fecdd3;
+      padding: 8px 12px;
+      border-radius: 12px;
+      margin-bottom: 14px;
+      transition: all 0.2s ease;
+    }
+
+    .card-song:hover {
+      border-color: var(--accent);
+      background: #ffe4e6;
+    }
+
+    .disc-icon {
+      font-size: 16px;
+      display: inline-block;
+      animation: spinDisc 4s linear infinite;
+    }
+
+    @keyframes spinDisc {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .song-details {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .song-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #9d174d;
+      font-weight: 700;
+    }
+
+    .song-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #881337;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .spotify-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: #1db954;
+      color: white;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 5px 10px;
+      border-radius: 50px;
+      text-decoration: none;
+      transition: transform 0.2s, background 0.2s;
+      flex-shrink: 0;
+    }
+
+    .spotify-badge:hover {
+      background: #1aa34a;
+      transform: scale(1.05);
     }
 
     .card-footer {
@@ -1080,6 +1153,7 @@
       <div class="lightbox-caption-box">
         <h4 class="lightbox-title" id="lightboxTitle"></h4>
         <p class="lightbox-desc" id="lightboxDesc"></p>
+        <div id="lightboxSongBox"></div>
       </div>
     </div>
   </div>
@@ -1099,6 +1173,8 @@
         category: 'Milestones',
         image: 'photo1.jpg',
         caption: 'From chats to real hugs. 🫶',
+        song: 'Sila by SUD',
+        spotifyId: '2IMODbij0lZ5CuAjZi0IDE',
         likes: 0
       },
       {
@@ -1108,15 +1184,19 @@
         category: 'Dates',
         image: 'photo2.jpg',
         caption: 'A little picnic, a lot of love. 🧺🤍',
+        song: 'Dumaloy by SUD',
+        spotifyId: '1X6CvDSqNCsOy0h2pv9Yjd',
         likes: 0
       },
       {
         id: '3',
-        title: 'Family Reunion',
+        title: 'Together is our favorite place',
         date: '2026-11-15',
         category: 'Sweet Moments',
         image: 'photo3.jpg',
         caption: 'Together is our favorite place. ♡',
+        song: 'Yellow by Coldplay',
+        spotifyId: '3AJwUDP919kvQ9QcozQPxg',
         likes: 0
       }
     ];
@@ -1124,10 +1204,10 @@
     // Local Storage helpers
     function getMemories() {
       const data = localStorage.getItem('couple_memories');
-      const v = localStorage.getItem('couple_memories_v4');
+      const v = localStorage.getItem('couple_memories_v5');
       if (!data || !v) {
         localStorage.setItem('couple_memories', JSON.stringify(defaultMemories));
-        localStorage.setItem('couple_memories_v4', '1');
+        localStorage.setItem('couple_memories_v5', '1');
         return defaultMemories;
       }
       try {
@@ -1241,6 +1321,21 @@
             </div>
             <h3 class="card-title">${escapeHtml(m.title)}</h3>
             <p class="card-caption">${escapeHtml(m.caption)}</p>
+            ${m.song ? `
+              <div class="card-song" onclick="event.stopPropagation()">
+                <span class="disc-icon">💿</span>
+                <div class="song-details">
+                  <span class="song-label">Our Song</span>
+                  <span class="song-name">${escapeHtml(m.song)}</span>
+                </div>
+                ${m.spotifyId ? `
+                  <a href="https://open.spotify.com/track/${m.spotifyId}" target="_blank" rel="noopener" class="spotify-badge" title="Listen on Spotify">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+                    Play
+                  </a>
+                ` : ''}
+              </div>
+            ` : ''}
             <div class="card-footer">
               <button class="like-btn" onclick="toggleLike('${m.id}')">
                 <span>❤️</span>
@@ -1445,6 +1540,22 @@
       lightboxImg.src = item.image;
       lightboxTitle.textContent = item.title;
       lightboxDesc.textContent = `${formatDate(item.date)} • ${item.caption || ''}`;
+
+      const songBox = document.getElementById('lightboxSongBox');
+      if (songBox) {
+        if (item.spotifyId) {
+          songBox.innerHTML = `
+            <iframe style="border-radius:12px; margin-top:14px;" 
+              src="https://open.spotify.com/embed/track/${item.spotifyId}?utm_source=generator&theme=0" 
+              width="100%" height="80" frameBorder="0" allowfullscreen="" 
+              allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
+          `;
+        } else if (item.song) {
+          songBox.innerHTML = `<div style="margin-top:10px; font-size:14px; color:#ffe4e6;">🎵 Song: ${escapeHtml(item.song)}</div>`;
+        } else {
+          songBox.innerHTML = '';
+        }
+      }
     }
 
     document.getElementById('lightboxCloseBtn').addEventListener('click', () => {
